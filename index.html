@@ -67,7 +67,7 @@
   #elapsed.warn { color: #f5a623; }
   #elapsed.over { color: #ff4d4d; }
 
-  #toggleControls, .ghost-btn {
+  #toggleControls, #btnFullscreen, .ghost-btn {
     background: #2a2a2a;
     color: #fff;
     border: 1px solid #444;
@@ -76,8 +76,37 @@
     font-size: 14px;
     cursor: pointer;
   }
-  #toggleControls:hover, .ghost-btn:hover { background: #3a3a3a; }
+  #toggleControls:hover, #btnFullscreen:hover, .ghost-btn:hover { background: #3a3a3a; }
   .ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .topbar-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* ---------- Modo pantalla completa (oculta topbar y controles) ---------- */
+  #app.focus-mode #topbar,
+  #app.focus-mode #controls {
+    display: none;
+  }
+
+  #btnExitFocus {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 40;
+    background: rgba(30, 30, 30, 0.55);
+    color: #ddd;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+  }
+  #btnExitFocus:hover { opacity: 1; }
+  #btnExitFocus.hidden { display: none; }
 
   .script-filename {
     font-size: 12px;
@@ -280,7 +309,10 @@
       <span class="time-label">Objetivo</span>
       <span class="time-value" id="target">03:00</span>
     </div>
-    <button id="toggleControls">Ocultar controles</button>
+    <div class="topbar-actions">
+      <button id="btnFullscreen">Pantalla completa</button>
+      <button id="toggleControls">Ocultar controles</button>
+    </div>
   </div>
 
   <div id="controls">
@@ -307,6 +339,11 @@
       <button type="button" class="ghost-btn" id="btnLoadScript">Cargar archivo .txt</button>
       <input type="file" id="fileInput" accept=".txt,text/plain" style="display:none">
       <span class="script-filename" id="scriptFileName">Texto por defecto</span>
+    </div>
+
+    <div class="control-group">
+      <label>Pausa entre frases (<span class="range-value" id="pauseValue">1.0s</span>)</label>
+      <input type="range" id="pauseSlider" min="0" max="2.5" step="0.25" value="1">
     </div>
 
     <div class="buttons">
@@ -339,7 +376,9 @@
     <div id="countdownNumber">5</div>
   </div>
 
-  <div id="hint">Espacio = Iniciar / Pausar</div>
+  <div id="hint">Espacio = Iniciar / Pausar · Esc = salir de pantalla completa</div>
+
+  <button id="btnExitFocus" class="hidden">Salir de pantalla completa</button>
 
 </div>
 
@@ -363,13 +402,19 @@
   const btnLoadScript = document.getElementById('btnLoadScript');
   const fileInput = document.getElementById('fileInput');
   const scriptFileName = document.getElementById('scriptFileName');
+  const pauseSlider = document.getElementById('pauseSlider');
+  const pauseValue = document.getElementById('pauseValue');
   const countdownChoice = document.getElementById('countdownChoice');
   const toggleControls = document.getElementById('toggleControls');
   const controlsPanel = document.getElementById('controls');
+  const btnFullscreen = document.getElementById('btnFullscreen');
+  const btnExitFocus = document.getElementById('btnExitFocus');
+  const appEl = document.getElementById('app');
 
   let countdownSeconds = 5;
   let speedFactor = 1;
   let basePxPerSecond = 0;
+  let paragraphPauseSeconds = 1;
 
   let state = 'idle'; // idle | countdown | running | paused | finished
   let scrollTop = 0;
@@ -377,6 +422,9 @@
   let lastFrameTime = null;
   let scrollTimerId = null;
   let elapsedTimerId = null;
+  let paragraphBoundaries = [];
+  let nextBoundaryIndex = 0;
+  let pausedUntil = 0;
 
   targetEl.textContent = formatTime(TARGET_SECONDS);
 
@@ -388,7 +436,13 @@
 
   function calibrateSpeed() {
     const maxScroll = Math.max(scrollContent.scrollHeight - scrollArea.clientHeight, 1);
-    basePxPerSecond = maxScroll / TARGET_SECONDS;
+
+    const paragraphs = Array.from(scrollContent.querySelectorAll('p'));
+    paragraphBoundaries = paragraphs.slice(1).map(p => p.offsetTop);
+
+    const totalPauseSeconds = paragraphBoundaries.length * paragraphPauseSeconds;
+    const scrollSeconds = Math.max(TARGET_SECONDS - totalPauseSeconds, TARGET_SECONDS * 0.5);
+    basePxPerSecond = maxScroll / scrollSeconds;
   }
 
   function applyFontSize(px) {
@@ -429,8 +483,22 @@
     const deltaSeconds = (now - lastFrameTime) / 1000;
     lastFrameTime = now;
 
+    if (now < pausedUntil) return;
+
     const maxScroll = Math.max(scrollContent.scrollHeight - scrollArea.clientHeight, 1);
-    scrollTop = Math.min(scrollTop + basePxPerSecond * speedFactor * deltaSeconds, maxScroll);
+    let nextScrollTop = scrollTop + basePxPerSecond * speedFactor * deltaSeconds;
+
+    // Al llegar al inicio de un nuevo párrafo/oración, nos detenemos ahí
+    // y damos un pequeño respiro antes de continuar con la siguiente.
+    if (nextBoundaryIndex < paragraphBoundaries.length && nextScrollTop >= paragraphBoundaries[nextBoundaryIndex]) {
+      nextScrollTop = paragraphBoundaries[nextBoundaryIndex];
+      nextBoundaryIndex++;
+      if (paragraphPauseSeconds > 0) {
+        pausedUntil = now + paragraphPauseSeconds * 1000;
+      }
+    }
+
+    scrollTop = Math.min(nextScrollTop, maxScroll);
     scrollArea.scrollTop = scrollTop;
 
     if (scrollTop >= maxScroll) {
@@ -475,6 +543,7 @@
     const locked = state === 'countdown' || state === 'running' || state === 'paused';
     fontSlider.disabled = locked;
     btnLoadScript.disabled = locked;
+    pauseSlider.disabled = locked;
   }
 
   function beginCountdown() {
@@ -554,6 +623,8 @@
     scrollTop = 0;
     scrollArea.scrollTop = 0;
     elapsedMs = 0;
+    nextBoundaryIndex = 0;
+    pausedUntil = 0;
     updateElapsedDisplay();
     countdownOverlay.classList.add('hidden');
     setButtonsForState();
@@ -577,6 +648,12 @@
     calibrateSpeed();
   });
 
+  pauseSlider.addEventListener('input', () => {
+    paragraphPauseSeconds = parseFloat(pauseSlider.value);
+    pauseValue.textContent = paragraphPauseSeconds.toFixed(2) + 's';
+    calibrateSpeed();
+  });
+
   btnLoadScript.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', () => {
@@ -596,15 +673,45 @@
     toggleControls.textContent = hidden ? 'Mostrar controles' : 'Ocultar controles';
   });
 
+  function enterFocusMode() {
+    appEl.classList.add('focus-mode');
+    btnExitFocus.classList.remove('hidden');
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    if (state === 'idle') calibrateSpeed();
+  }
+
+  function exitFocusMode() {
+    appEl.classList.remove('focus-mode');
+    btnExitFocus.classList.add('hidden');
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    if (state === 'idle') calibrateSpeed();
+  }
+
+  btnFullscreen.addEventListener('click', enterFocusMode);
+  btnExitFocus.addEventListener('click', exitFocusMode);
+
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) {
+      exitFocusMode();
+    }
+  });
+
   btnStart.addEventListener('click', beginCountdown);
   btnPause.addEventListener('click', togglePause);
   btnReset.addEventListener('click', reset);
 
   document.addEventListener('keydown', (e) => {
-    if (e.code !== 'Space') return;
-    e.preventDefault();
-    if (state === 'idle') beginCountdown();
-    else if (state === 'running' || state === 'paused') togglePause();
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (state === 'idle') beginCountdown();
+      else if (state === 'running' || state === 'paused') togglePause();
+    } else if (e.key === 'Escape' && appEl.classList.contains('focus-mode')) {
+      exitFocusMode();
+    }
   });
 
   window.addEventListener('resize', () => {
