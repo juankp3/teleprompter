@@ -90,6 +90,14 @@
     display: none;
   }
 
+  /* Elementos flotantes: solo visibles en modo pantalla completa */
+  #btnExitFocus, #floatingTime, #floatingControls {
+    display: none;
+  }
+  #app.focus-mode #btnExitFocus { display: block; }
+  #app.focus-mode #floatingTime { display: flex; }
+  #app.focus-mode #floatingControls { display: flex; }
+
   #btnExitFocus {
     position: fixed;
     top: 14px;
@@ -106,7 +114,54 @@
     transition: opacity 0.2s ease;
   }
   #btnExitFocus:hover { opacity: 1; }
-  #btnExitFocus.hidden { display: none; }
+
+  #floatingTime {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 40;
+    align-items: baseline;
+    gap: 5px;
+    background: rgba(30, 30, 30, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+  }
+  #floatingTime:hover { opacity: 1; }
+  #floatingElapsed.warn { color: #f5a623; }
+  #floatingElapsed.over { color: #ff4d4d; }
+  #floatingTime .sep { color: #888; }
+
+  #floatingControls {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    gap: 10px;
+  }
+
+  .float-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.2s ease;
+  }
+  .float-btn:hover { opacity: 1; }
+  .float-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+  #btnStartFloat { background: #2ecc71; color: #063; }
+  #btnPauseFloat { background: #f5a623; color: #4a3300; }
+  #btnResetFloat { background: #555; color: #fff; }
 
   .script-filename {
     font-size: 12px;
@@ -223,25 +278,6 @@
     position: relative;
   }
 
-  #scrollArea::before,
-  #scrollArea::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 18vh;
-    pointer-events: none;
-    z-index: 10;
-  }
-  #scrollArea::before {
-    top: 0;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0));
-  }
-  #scrollArea::after {
-    bottom: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0));
-  }
-
   #readingLine {
     position: absolute;
     left: 0;
@@ -295,6 +331,69 @@
     color: #666;
     z-index: 20;
   }
+
+  /* ---------- Vista previa del guion cargado ---------- */
+  #previewOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+  #previewOverlay.hidden { display: none; }
+
+  #previewPanel {
+    background: #131313;
+    border: 1px solid #333;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 720px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+  }
+
+  #previewPanel h2 {
+    margin: 0 0 16px 0;
+    font-size: 18px;
+    color: #fff;
+  }
+
+  #previewContent {
+    overflow-y: auto;
+    color: #eee;
+    font-size: 17px;
+    line-height: 1.6;
+    padding-right: 10px;
+  }
+
+  #previewContent p {
+    margin: 0 0 1em 0;
+  }
+
+  .preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  #btnPreviewUse {
+    background: #2ecc71;
+    color: #063;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #btnPreviewUse:hover { background: #3fdc80; }
+  #btnPreviewUse.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -331,12 +430,15 @@
 
     <div class="control-group">
       <label>Tamaño de texto (<span class="range-value" id="fontValue">46px</span>)</label>
-      <input type="range" id="fontSlider" min="28" max="72" step="2" value="46">
+      <input type="range" id="fontSlider" min="28" max="110" step="2" value="46">
     </div>
 
     <div class="control-group">
       <label>Guion</label>
-      <button type="button" class="ghost-btn" id="btnLoadScript">Cargar archivo .txt</button>
+      <div style="display:flex; gap:6px;">
+        <button type="button" class="ghost-btn" id="btnLoadScript">Cargar archivo .txt</button>
+        <button type="button" class="ghost-btn" id="btnViewScript">Ver guion actual</button>
+      </div>
       <input type="file" id="fileInput" accept=".txt,text/plain" style="display:none">
       <span class="script-filename" id="scriptFileName">Texto por defecto</span>
     </div>
@@ -344,6 +446,11 @@
     <div class="control-group">
       <label>Pausa entre frases (<span class="range-value" id="pauseValue">1.0s</span>)</label>
       <input type="range" id="pauseSlider" min="0" max="2.5" step="0.25" value="1">
+    </div>
+
+    <div class="control-group">
+      <label>Duración objetivo (<span class="range-value" id="targetSliderValue">03:00</span>)</label>
+      <input type="range" id="targetSlider" min="30" max="900" step="15" value="180">
     </div>
 
     <div class="buttons">
@@ -378,13 +485,34 @@
 
   <div id="hint">Espacio = Iniciar / Pausar · Esc = salir de pantalla completa</div>
 
-  <button id="btnExitFocus" class="hidden">Salir de pantalla completa</button>
+  <button id="btnExitFocus">Salir de pantalla completa</button>
+
+  <div id="floatingTime">
+    <span id="floatingElapsed">00:00</span><span class="sep">/</span><span id="floatingTarget">03:00</span>
+  </div>
+
+  <div id="floatingControls">
+    <button id="btnStartFloat" class="float-btn">Iniciar</button>
+    <button id="btnPauseFloat" class="float-btn" disabled>Pausar</button>
+    <button id="btnResetFloat" class="float-btn">Reiniciar</button>
+  </div>
+
+  <div id="previewOverlay" class="hidden">
+    <div id="previewPanel">
+      <h2>Vista previa del guion</h2>
+      <div id="previewContent"></div>
+      <div class="preview-actions">
+        <button type="button" class="ghost-btn" id="btnPreviewCancel">Cancelar</button>
+        <button type="button" id="btnPreviewUse">Usar este guion</button>
+      </div>
+    </div>
+  </div>
 
 </div>
 
 <script>
 (function () {
-  const TARGET_SECONDS = 180;
+  const WPM = 140; // ritmo de habla estándar usado para estimar la duración objetivo
 
   const scrollArea = document.getElementById('scrollArea');
   const scrollContent = document.getElementById('scrollContent');
@@ -400,21 +528,34 @@
   const fontSlider = document.getElementById('fontSlider');
   const fontValue = document.getElementById('fontValue');
   const btnLoadScript = document.getElementById('btnLoadScript');
+  const btnViewScript = document.getElementById('btnViewScript');
   const fileInput = document.getElementById('fileInput');
   const scriptFileName = document.getElementById('scriptFileName');
   const pauseSlider = document.getElementById('pauseSlider');
   const pauseValue = document.getElementById('pauseValue');
+  const targetSlider = document.getElementById('targetSlider');
+  const targetSliderValue = document.getElementById('targetSliderValue');
   const countdownChoice = document.getElementById('countdownChoice');
   const toggleControls = document.getElementById('toggleControls');
   const controlsPanel = document.getElementById('controls');
   const btnFullscreen = document.getElementById('btnFullscreen');
   const btnExitFocus = document.getElementById('btnExitFocus');
   const appEl = document.getElementById('app');
+  const floatingElapsed = document.getElementById('floatingElapsed');
+  const floatingTarget = document.getElementById('floatingTarget');
+  const btnStartFloat = document.getElementById('btnStartFloat');
+  const btnPauseFloat = document.getElementById('btnPauseFloat');
+  const btnResetFloat = document.getElementById('btnResetFloat');
+  const previewOverlay = document.getElementById('previewOverlay');
+  const previewContent = document.getElementById('previewContent');
+  const btnPreviewUse = document.getElementById('btnPreviewUse');
+  const btnPreviewCancel = document.getElementById('btnPreviewCancel');
 
   let countdownSeconds = 5;
   let speedFactor = 1;
   let basePxPerSecond = 0;
   let paragraphPauseSeconds = 1;
+  let targetSeconds = 180;
 
   let state = 'idle'; // idle | countdown | running | paused | finished
   let scrollTop = 0;
@@ -425,13 +566,32 @@
   let paragraphBoundaries = [];
   let nextBoundaryIndex = 0;
   let pausedUntil = 0;
-
-  targetEl.textContent = formatTime(TARGET_SECONDS);
+  let pendingParagraphs = null;
+  let pendingFileName = null;
+  let wakeLockSentinel = null;
 
   function formatTime(totalSeconds) {
     const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
     const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
     return m + ':' + s;
+  }
+
+  function estimateTargetSeconds(paragraphTexts) {
+    const wordCount = paragraphTexts.reduce(
+      (sum, text) => sum + text.trim().split(/\s+/).filter(Boolean).length,
+      0
+    );
+    return Math.max(30, Math.round((wordCount / WPM) * 60));
+  }
+
+  function setTargetSeconds(seconds) {
+    targetSeconds = Math.max(30, Math.round(seconds));
+    const sliderMax = parseInt(targetSlider.max, 10);
+    if (targetSeconds > sliderMax) {
+      targetSlider.max = String(Math.ceil(targetSeconds / 15) * 15);
+    }
+    targetSlider.value = String(targetSeconds);
+    refreshTimeDisplays();
   }
 
   function calibrateSpeed() {
@@ -441,7 +601,7 @@
     paragraphBoundaries = paragraphs.slice(1).map(p => p.offsetTop);
 
     const totalPauseSeconds = paragraphBoundaries.length * paragraphPauseSeconds;
-    const scrollSeconds = Math.max(TARGET_SECONDS - totalPauseSeconds, TARGET_SECONDS * 0.5);
+    const scrollSeconds = Math.max(targetSeconds - totalPauseSeconds, targetSeconds * 0.5);
     basePxPerSecond = maxScroll / scrollSeconds;
   }
 
@@ -450,14 +610,37 @@
     fontValue.textContent = px + 'px';
   }
 
-  function updateElapsedDisplay() {
+  function refreshTimeDisplays() {
     const totalSeconds = elapsedMs / 1000;
-    elapsedEl.textContent = formatTime(totalSeconds);
-    elapsedEl.classList.remove('warn', 'over');
-    if (totalSeconds >= TARGET_SECONDS) {
-      elapsedEl.classList.add('over');
-    } else if (totalSeconds >= TARGET_SECONDS - 20) {
-      elapsedEl.classList.add('warn');
+    const formattedElapsed = formatTime(totalSeconds);
+    const formattedTarget = formatTime(targetSeconds);
+
+    elapsedEl.textContent = formattedElapsed;
+    targetEl.textContent = formattedTarget;
+    targetSliderValue.textContent = formattedTarget;
+
+    const isOver = totalSeconds >= targetSeconds;
+    const isWarn = !isOver && totalSeconds >= targetSeconds - 20;
+    elapsedEl.classList.toggle('over', isOver);
+    elapsedEl.classList.toggle('warn', isWarn);
+
+    floatingElapsed.textContent = formattedElapsed;
+    floatingTarget.textContent = formattedTarget;
+    floatingElapsed.classList.toggle('over', isOver);
+    floatingElapsed.classList.toggle('warn', isWarn);
+  }
+
+  function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen')
+      .then(sentinel => { wakeLockSentinel = sentinel; })
+      .catch(() => { wakeLockSentinel = null; });
+  }
+
+  function releaseWakeLock() {
+    if (wakeLockSentinel) {
+      wakeLockSentinel.release().catch(() => {});
+      wakeLockSentinel = null;
     }
   }
 
@@ -465,7 +648,7 @@
     stopElapsedTimer();
     elapsedTimerId = setInterval(() => {
       elapsedMs += 1000;
-      updateElapsedDisplay();
+      refreshTimeDisplays();
     }, 1000);
   }
 
@@ -520,30 +703,41 @@
   }
 
   function setButtonsForState() {
+    let startDisabled, pauseDisabled, pauseLabel;
     if (state === 'idle' || state === 'countdown') {
-      btnStart.disabled = state === 'countdown';
-      btnPause.disabled = true;
-      btnPause.textContent = 'Pausar';
+      startDisabled = state === 'countdown';
+      pauseDisabled = true;
+      pauseLabel = 'Pausar';
     } else if (state === 'running') {
-      btnStart.disabled = true;
-      btnPause.disabled = false;
-      btnPause.textContent = 'Pausar';
+      startDisabled = true;
+      pauseDisabled = false;
+      pauseLabel = 'Pausar';
     } else if (state === 'paused') {
-      btnStart.disabled = true;
-      btnPause.disabled = false;
-      btnPause.textContent = 'Reanudar';
-    } else if (state === 'finished') {
-      btnStart.disabled = true;
-      btnPause.disabled = true;
+      startDisabled = true;
+      pauseDisabled = false;
+      pauseLabel = 'Reanudar';
+    } else { // finished
+      startDisabled = true;
+      pauseDisabled = true;
+      pauseLabel = 'Pausar';
     }
 
-    // El tamaño de texto y el guion solo se pueden cambiar en reposo:
-    // cambiarlos a mitad de lectura desincroniza la velocidad calibrada
-    // con el tiempo/posición ya recorridos.
+    btnStart.disabled = startDisabled;
+    btnPause.disabled = pauseDisabled;
+    btnPause.textContent = pauseLabel;
+
+    btnStartFloat.disabled = startDisabled;
+    btnPauseFloat.disabled = pauseDisabled;
+    btnPauseFloat.textContent = pauseLabel;
+
+    // El tamaño de texto, el guion, la pausa entre frases y la duración objetivo
+    // solo se pueden cambiar en reposo: cambiarlos a mitad de lectura
+    // desincroniza la velocidad calibrada con el tiempo/posición ya recorridos.
     const locked = state === 'countdown' || state === 'running' || state === 'paused';
     fontSlider.disabled = locked;
     btnLoadScript.disabled = locked;
     pauseSlider.disabled = locked;
+    targetSlider.disabled = locked;
   }
 
   function beginCountdown() {
@@ -551,6 +745,7 @@
     state = 'countdown';
     setButtonsForState();
     calibrateSpeed();
+    requestWakeLock();
 
     let remaining = countdownSeconds;
     countdownNumber.textContent = remaining;
@@ -571,7 +766,7 @@
   function beginRunning() {
     state = 'running';
     elapsedMs = 0;
-    updateElapsedDisplay();
+    refreshTimeDisplays();
     startElapsedTimer();
     startScrollTimer();
     setButtonsForState();
@@ -595,37 +790,57 @@
     state = 'finished';
     stopElapsedTimer();
     stopScrollTimer();
+    releaseWakeLock();
     setButtonsForState();
   }
 
-  function setScriptParagraphs(text) {
-    const paragraphs = text
+  function parseParagraphs(text) {
+    return text
       .split(/\n\s*\n/)
       .map(p => p.replace(/\s+/g, ' ').trim())
       .filter(p => p.length > 0);
+  }
 
+  function applyParagraphs(paragraphTexts) {
     scrollContent.innerHTML = '';
-    paragraphs.forEach(paragraphText => {
+    paragraphTexts.forEach(paragraphText => {
       const p = document.createElement('p');
       p.textContent = paragraphText;
       p.style.fontSize = fontSlider.value + 'px';
       scrollContent.appendChild(p);
     });
 
+    setTargetSeconds(estimateTargetSeconds(paragraphTexts));
     reset();
     calibrateSpeed();
+  }
+
+  function showScriptPreview(paragraphTexts, mode) {
+    previewContent.innerHTML = '';
+    paragraphTexts.forEach(text => {
+      const p = document.createElement('p');
+      p.textContent = text;
+      previewContent.appendChild(p);
+    });
+
+    const isConfirmMode = mode === 'confirm';
+    pendingParagraphs = isConfirmMode ? paragraphTexts : null;
+    btnPreviewUse.classList.toggle('hidden', !isConfirmMode);
+    btnPreviewCancel.textContent = isConfirmMode ? 'Cancelar' : 'Cerrar';
+    previewOverlay.classList.remove('hidden');
   }
 
   function reset() {
     state = 'idle';
     stopElapsedTimer();
     stopScrollTimer();
+    releaseWakeLock();
     scrollTop = 0;
     scrollArea.scrollTop = 0;
     elapsedMs = 0;
     nextBoundaryIndex = 0;
     pausedUntil = 0;
-    updateElapsedDisplay();
+    refreshTimeDisplays();
     countdownOverlay.classList.add('hidden');
     setButtonsForState();
   }
@@ -654,6 +869,11 @@
     calibrateSpeed();
   });
 
+  targetSlider.addEventListener('input', () => {
+    setTargetSeconds(parseInt(targetSlider.value, 10));
+    calibrateSpeed();
+  });
+
   btnLoadScript.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', () => {
@@ -661,11 +881,28 @@
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      setScriptParagraphs(String(reader.result));
-      scriptFileName.textContent = file.name;
+      pendingFileName = file.name;
+      showScriptPreview(parseParagraphs(String(reader.result)), 'confirm');
     };
     reader.readAsText(file, 'UTF-8');
     fileInput.value = '';
+  });
+
+  btnViewScript.addEventListener('click', () => {
+    const currentTexts = Array.from(scrollContent.querySelectorAll('p')).map(p => p.textContent);
+    showScriptPreview(currentTexts, 'view');
+  });
+
+  btnPreviewUse.addEventListener('click', () => {
+    if (pendingParagraphs) {
+      applyParagraphs(pendingParagraphs);
+      scriptFileName.textContent = pendingFileName || 'Guion personalizado';
+    }
+    previewOverlay.classList.add('hidden');
+  });
+
+  btnPreviewCancel.addEventListener('click', () => {
+    previewOverlay.classList.add('hidden');
   });
 
   toggleControls.addEventListener('click', () => {
@@ -675,7 +912,6 @@
 
   function enterFocusMode() {
     appEl.classList.add('focus-mode');
-    btnExitFocus.classList.remove('hidden');
     if (document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(() => {});
     }
@@ -684,7 +920,6 @@
 
   function exitFocusMode() {
     appEl.classList.remove('focus-mode');
-    btnExitFocus.classList.add('hidden');
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
@@ -704,6 +939,10 @@
   btnPause.addEventListener('click', togglePause);
   btnReset.addEventListener('click', reset);
 
+  btnStartFloat.addEventListener('click', beginCountdown);
+  btnPauseFloat.addEventListener('click', togglePause);
+  btnResetFloat.addEventListener('click', reset);
+
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
       e.preventDefault();
@@ -718,6 +957,16 @@
     if (state === 'idle') calibrateSpeed();
   });
 
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' &&
+        (state === 'countdown' || state === 'running' || state === 'paused')) {
+      requestWakeLock();
+    }
+  });
+
+  setTargetSeconds(estimateTargetSeconds(
+    Array.from(scrollContent.querySelectorAll('p')).map(p => p.textContent)
+  ));
   applyFontSize(46);
   calibrateSpeed();
   setButtonsForState();
