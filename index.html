@@ -67,7 +67,7 @@
   #elapsed.warn { color: #f5a623; }
   #elapsed.over { color: #ff4d4d; }
 
-  #toggleControls, #btnFullscreen, .ghost-btn {
+  #toggleControls, .ghost-btn {
     background: #2a2a2a;
     color: #fff;
     border: 1px solid #444;
@@ -76,13 +76,8 @@
     font-size: 14px;
     cursor: pointer;
   }
-  #toggleControls:hover, #btnFullscreen:hover, .ghost-btn:hover { background: #3a3a3a; }
+  #toggleControls:hover, .ghost-btn:hover { background: #3a3a3a; }
   .ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .topbar-actions {
-    display: flex;
-    gap: 8px;
-  }
 
   /* ---------- Modo pantalla completa (oculta topbar y controles) ---------- */
   #app.focus-mode #topbar,
@@ -90,35 +85,19 @@
     display: none;
   }
 
-  /* Elementos flotantes: solo visibles en modo pantalla completa */
-  #btnExitFocus, #floatingTime, #floatingControls {
+  /* Elementos flotantes: solo visibles en modo pantalla completa.
+     El cronómetro va arriba a la derecha para no chocar con el botón "X"
+     nativo que Safari en iOS superpone arriba a la izquierda. */
+  #floatingTime, #btnStopFloat {
     display: none;
   }
-  #app.focus-mode #btnExitFocus { display: block; }
   #app.focus-mode #floatingTime { display: flex; }
-  #app.focus-mode #floatingControls { display: flex; }
-
-  #btnExitFocus {
-    position: fixed;
-    top: 14px;
-    right: 14px;
-    z-index: 40;
-    background: rgba(30, 30, 30, 0.55);
-    color: #ddd;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 12px;
-    cursor: pointer;
-    opacity: 0.35;
-    transition: opacity 0.2s ease;
-  }
-  #btnExitFocus:hover { opacity: 1; }
+  #app.focus-mode #btnStopFloat { display: flex; }
 
   #floatingTime {
     position: fixed;
     top: 14px;
-    left: 14px;
+    right: 14px;
     z-index: 40;
     align-items: baseline;
     gap: 5px;
@@ -137,31 +116,27 @@
   #floatingElapsed.over { color: #ff4d4d; }
   #floatingTime .sep { color: #888; }
 
-  #floatingControls {
+  #btnStopFloat {
     position: fixed;
-    bottom: 16px;
+    bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 40;
-    gap: 10px;
-  }
-
-  .float-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
     border: none;
-    border-radius: 6px;
-    padding: 8px 18px;
-    font-size: 13px;
-    font-weight: 600;
+    background: #ff3b30;
+    color: #fff;
+    font-size: 22px;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    opacity: 0.55;
+    opacity: 0.85;
     transition: opacity 0.2s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
   }
-  .float-btn:hover { opacity: 1; }
-  .float-btn:disabled { opacity: 0.25; cursor: not-allowed; }
-
-  #btnStartFloat { background: #2ecc71; color: #063; }
-  #btnPauseFloat { background: #f5a623; color: #4a3300; }
-  #btnResetFloat { background: #555; color: #fff; }
+  #btnStopFloat:hover { opacity: 1; }
 
   .script-filename {
     font-size: 12px;
@@ -408,10 +383,7 @@
       <span class="time-label">Objetivo</span>
       <span class="time-value" id="target">03:00</span>
     </div>
-    <div class="topbar-actions">
-      <button id="btnFullscreen">Pantalla completa</button>
-      <button id="toggleControls">Ocultar controles</button>
-    </div>
+    <button id="toggleControls">Ocultar controles</button>
   </div>
 
   <div id="controls">
@@ -483,19 +455,13 @@
     <div id="countdownNumber">5</div>
   </div>
 
-  <div id="hint">Espacio = Iniciar / Pausar · Esc = salir de pantalla completa</div>
-
-  <button id="btnExitFocus">Salir de pantalla completa</button>
+  <div id="hint">Espacio = Iniciar / Pausar · Esc = detener y salir</div>
 
   <div id="floatingTime">
     <span id="floatingElapsed">00:00</span><span class="sep">/</span><span id="floatingTarget">03:00</span>
   </div>
 
-  <div id="floatingControls">
-    <button id="btnStartFloat" class="float-btn">Iniciar</button>
-    <button id="btnPauseFloat" class="float-btn" disabled>Pausar</button>
-    <button id="btnResetFloat" class="float-btn">Reiniciar</button>
-  </div>
+  <button id="btnStopFloat" aria-label="Detener y salir de pantalla completa">■</button>
 
   <div id="previewOverlay" class="hidden">
     <div id="previewPanel">
@@ -538,14 +504,10 @@
   const countdownChoice = document.getElementById('countdownChoice');
   const toggleControls = document.getElementById('toggleControls');
   const controlsPanel = document.getElementById('controls');
-  const btnFullscreen = document.getElementById('btnFullscreen');
-  const btnExitFocus = document.getElementById('btnExitFocus');
   const appEl = document.getElementById('app');
   const floatingElapsed = document.getElementById('floatingElapsed');
   const floatingTarget = document.getElementById('floatingTarget');
-  const btnStartFloat = document.getElementById('btnStartFloat');
-  const btnPauseFloat = document.getElementById('btnPauseFloat');
-  const btnResetFloat = document.getElementById('btnResetFloat');
+  const btnStopFloat = document.getElementById('btnStopFloat');
   const previewOverlay = document.getElementById('previewOverlay');
   const previewContent = document.getElementById('previewContent');
   const btnPreviewUse = document.getElementById('btnPreviewUse');
@@ -725,10 +687,6 @@
     btnStart.disabled = startDisabled;
     btnPause.disabled = pauseDisabled;
     btnPause.textContent = pauseLabel;
-
-    btnStartFloat.disabled = startDisabled;
-    btnPauseFloat.disabled = pauseDisabled;
-    btnPauseFloat.textContent = pauseLabel;
 
     // El tamaño de texto, el guion, la pausa entre frases y la duración objetivo
     // solo se pueden cambiar en reposo: cambiarlos a mitad de lectura
@@ -915,19 +873,28 @@
     if (document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(() => {});
     }
-    if (state === 'idle') calibrateSpeed();
+    calibrateSpeed();
   }
 
+  // Detiene todo (scroll/cronómetro/wake lock) y sale de pantalla completa,
+  // sin importar si se dispara desde nuestro botón, el "X" nativo de Safari
+  // o la tecla Esc: los tres caminos deben dejar la app en el mismo estado.
   function exitFocusMode() {
+    reset();
     appEl.classList.remove('focus-mode');
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
-    if (state === 'idle') calibrateSpeed();
+    calibrateSpeed();
   }
 
-  btnFullscreen.addEventListener('click', enterFocusMode);
-  btnExitFocus.addEventListener('click', exitFocusMode);
+  function startTeleprompter() {
+    if (state !== 'idle') return;
+    enterFocusMode();
+    beginCountdown();
+  }
+
+  btnStopFloat.addEventListener('click', exitFocusMode);
 
   document.addEventListener('fullscreenchange', () => {
     if (!document.fullscreenElement) {
@@ -935,18 +902,14 @@
     }
   });
 
-  btnStart.addEventListener('click', beginCountdown);
+  btnStart.addEventListener('click', startTeleprompter);
   btnPause.addEventListener('click', togglePause);
   btnReset.addEventListener('click', reset);
-
-  btnStartFloat.addEventListener('click', beginCountdown);
-  btnPauseFloat.addEventListener('click', togglePause);
-  btnResetFloat.addEventListener('click', reset);
 
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
       e.preventDefault();
-      if (state === 'idle') beginCountdown();
+      if (state === 'idle') startTeleprompter();
       else if (state === 'running' || state === 'paused') togglePause();
     } else if (e.key === 'Escape' && appEl.classList.contains('focus-mode')) {
       exitFocusMode();
