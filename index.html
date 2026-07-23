@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teleprompter — Dale una segunda vida a los equipos de WIN</title>
+<style>
+  :root {
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+
+  #app {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---------- Barra superior ---------- */
+  #topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 20px;
+    background: rgba(20, 20, 20, 0.95);
+    border-bottom: 1px solid #333;
+    z-index: 20;
+    flex-wrap: wrap;
+  }
+
+  .time-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 90px;
+  }
+
+  .time-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #999;
+  }
+
+  .time-value {
+    font-size: 28px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  #elapsed.warn { color: #f5a623; }
+  #elapsed.over { color: #ff4d4d; }
+
+  #toggleControls, .ghost-btn {
+    background: #2a2a2a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #toggleControls:hover, .ghost-btn:hover { background: #3a3a3a; }
+  .ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .script-filename {
+    font-size: 12px;
+    color: #888;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ---------- Panel de controles ---------- */
+  #controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 24px;
+    padding: 14px 20px;
+    background: rgba(15, 15, 15, 0.97);
+    border-bottom: 1px solid #333;
+    z-index: 20;
+    transition: max-height 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
+    overflow: hidden;
+  }
+
+  #controls.hidden {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    border-bottom: none;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .control-group label {
+    font-size: 12px;
+    color: #aaa;
+  }
+
+  .segmented {
+    display: flex;
+    border: 1px solid #555;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .segmented button {
+    background: #1e1e1e;
+    color: #ccc;
+    border: none;
+    padding: 6px 16px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .segmented button + button {
+    border-left: 1px solid #555;
+  }
+
+  .segmented button.active {
+    background: #4a90e2;
+    color: #fff;
+  }
+
+  input[type="range"] {
+    width: 160px;
+  }
+
+  .range-value {
+    font-size: 12px;
+    color: #ddd;
+    min-width: 42px;
+    display: inline-block;
+    text-align: right;
+  }
+
+  .buttons {
+    display: flex;
+    gap: 10px;
+    margin-left: auto;
+  }
+
+  .buttons button {
+    padding: 10px 22px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+  }
+
+  #btnStart { background: #2ecc71; color: #063; }
+  #btnStart:hover { background: #3fdc80; }
+
+  #btnPause { background: #f5a623; color: #4a3300; }
+  #btnPause:hover { background: #ffb84d; }
+
+  #btnReset { background: #555; color: #fff; }
+  #btnReset:hover { background: #6a6a6a; }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ---------- Área de texto ---------- */
+  #scrollArea {
+    flex: 1;
+    overflow-y: hidden;
+    position: relative;
+  }
+
+  #scrollArea::before,
+  #scrollArea::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 18vh;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #scrollArea::before {
+    top: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0));
+  }
+  #scrollArea::after {
+    bottom: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0));
+  }
+
+  #readingLine {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 2px solid rgba(74, 144, 226, 0.35);
+    z-index: 11;
+    pointer-events: none;
+  }
+
+  #scrollContent {
+    padding: 46vh 6vw;
+    text-align: center;
+  }
+
+  #scrollContent p {
+    font-size: 46px;
+    line-height: 1.5;
+    font-weight: 600;
+    margin: 0 0 1.4em 0;
+  }
+
+  /* ---------- Overlay de cuenta regresiva ---------- */
+  #countdownOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+  }
+
+  #countdownOverlay.hidden {
+    display: none;
+  }
+
+  #countdownNumber {
+    font-size: 220px;
+    font-weight: 700;
+    color: #4a90e2;
+  }
+
+  #hint {
+    position: absolute;
+    bottom: 24px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 13px;
+    color: #666;
+    z-index: 20;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <div class="time-block">
+      <span class="time-label">Transcurrido</span>
+      <span class="time-value" id="elapsed">00:00</span>
+    </div>
+    <div class="time-block">
+      <span class="time-label">Objetivo</span>
+      <span class="time-value" id="target">03:00</span>
+    </div>
+    <button id="toggleControls">Ocultar controles</button>
+  </div>
+
+  <div id="controls">
+    <div class="control-group">
+      <label>Cuenta regresiva</label>
+      <div class="segmented" id="countdownChoice">
+        <button data-value="5" class="active">5s</button>
+        <button data-value="10">10s</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Velocidad (<span class="range-value" id="speedValue">1.0x</span>)</label>
+      <input type="range" id="speedSlider" min="0.5" max="1.5" step="0.05" value="1">
+    </div>
+
+    <div class="control-group">
+      <label>Tamaño de texto (<span class="range-value" id="fontValue">46px</span>)</label>
+      <input type="range" id="fontSlider" min="28" max="72" step="2" value="46">
+    </div>
+
+    <div class="control-group">
+      <label>Guion</label>
+      <button type="button" class="ghost-btn" id="btnLoadScript">Cargar archivo .txt</button>
+      <input type="file" id="fileInput" accept=".txt,text/plain" style="display:none">
+      <span class="script-filename" id="scriptFileName">Texto por defecto</span>
+    </div>
+
+    <div class="buttons">
+      <button id="btnStart">Iniciar</button>
+      <button id="btnPause" disabled>Pausar</button>
+      <button id="btnReset">Reiniciar</button>
+    </div>
+  </div>
+
+  <div id="scrollArea">
+    <div id="readingLine"></div>
+    <div id="scrollContent">
+      <p>Según un informe del Ministerio del Ambiente y la ONU del año 2023, el Perú genera cada año cerca de 205 mil toneladas de residuos de aparatos eléctricos y electrónicos, lo que equivale a unos 6.5 kilos por cada peruano. Como se sabe, buena parte de esta cifra proviene del sector telecomunicaciones, donde equipos como tarjetas OLT, ONTs y routers quedan obsoletos en muy pocos años.</p>
+
+      <p>Buenos días. Mi nombre es Juan Kuga, desarrollador de software con el puesto de senior en WIN. En esta exposición quiero compartir con ustedes una práctica de gestión sostenible que considero totalmente viable de implementar en la empresa de telecomunicaciones donde laboro: "Dale una segunda vida a los equipos de WIN". Como trabajadores del sector, nos corresponde repensar qué hacemos con cada equipo que retiramos: puede convertirse en un residuo más, o en una oportunidad de ahorro, si en lugar de desecharlo decidimos reacondicionarlo.</p>
+
+      <p>Esta práctica consiste en recuperar los equipos que la empresa retira por obsolescencia o falla, como tarjetas de planta interna y externa, ONTs y otros componentes de red, para diagnosticarlos, repararlos y reincorporarlos a las operaciones, en lugar de enviarlos directamente a disposición final.</p>
+
+      <p>Para que funcione, participan distintos actores: la propia empresa WIN, los técnicos de mantenimiento de planta, que son quienes identifican qué equipos aún se pueden recuperar, y proveedores certificados de reciclaje electrónico, que se encargan del tratamiento responsable de lo que ya no tiene reparación.</p>
+
+      <p>El proceso tiene tres etapas: primero, el retiro y diagnóstico de los equipos dados de baja; segundo, el reacondicionamiento en un taller técnico; y tercero, la reinstalación de esos equipos en zonas de expansión de red, o su venta como repuesto certificado a otros operadores.</p>
+
+      <p>De acuerdo con lo expuesto, implementar esta práctica trae beneficios tanto para la operación de la empresa como para el entorno donde trabajamos. En la dimensión económica, se reducen los costos de comprar equipos nuevos, ya que reutilizamos tarjetas y componentes reacondicionados, y además se pueden generar ingresos adicionales vendiendo esos equipos como repuestos certificados a otros operadores del mercado. En la dimensión ambiental, disminuimos el volumen de residuos electrónicos que la empresa genera y envía a disposición final, y reducimos también la huella de carbono asociada a fabricar y transportar equipos completamente nuevos.</p>
+
+      <p>Por todo lo dicho, mi recomendación es que WIN institucionalice un programa formal de reacondicionamiento de equipos, en alianza con proveedores certificados de manejo de residuos electrónicos, de modo que cada tarjeta o equipo retirado se evalúe antes de considerarlo un residuo. No se trata solo de ahorrar costos: se trata de que, entre todos, convirtamos a WIN en un referente de sostenibilidad dentro del sector telecomunicaciones en el Perú. Muchas gracias.</p>
+    </div>
+  </div>
+
+  <div id="countdownOverlay" class="hidden">
+    <div id="countdownNumber">5</div>
+  </div>
+
+  <div id="hint">Espacio = Iniciar / Pausar</div>
+
+</div>
+
+<script>
+(function () {
+  const TARGET_SECONDS = 180;
+
+  const scrollArea = document.getElementById('scrollArea');
+  const scrollContent = document.getElementById('scrollContent');
+  const elapsedEl = document.getElementById('elapsed');
+  const targetEl = document.getElementById('target');
+  const countdownOverlay = document.getElementById('countdownOverlay');
+  const countdownNumber = document.getElementById('countdownNumber');
+  const btnStart = document.getElementById('btnStart');
+  const btnPause = document.getElementById('btnPause');
+  const btnReset = document.getElementById('btnReset');
+  const speedSlider = document.getElementById('speedSlider');
+  const speedValue = document.getElementById('speedValue');
+  const fontSlider = document.getElementById('fontSlider');
+  const fontValue = document.getElementById('fontValue');
+  const btnLoadScript = document.getElementById('btnLoadScript');
+  const fileInput = document.getElementById('fileInput');
+  const scriptFileName = document.getElementById('scriptFileName');
+  const countdownChoice = document.getElementById('countdownChoice');
+  const toggleControls = document.getElementById('toggleControls');
+  const controlsPanel = document.getElementById('controls');
+
+  let countdownSeconds = 5;
+  let speedFactor = 1;
+  let basePxPerSecond = 0;
+
+  let state = 'idle'; // idle | countdown | running | paused | finished
+  let scrollTop = 0;
+  let elapsedMs = 0;
+  let lastFrameTime = null;
+  let scrollTimerId = null;
+  let elapsedTimerId = null;
+
+  targetEl.textContent = formatTime(TARGET_SECONDS);
+
+  function formatTime(totalSeconds) {
+    const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
+    return m + ':' + s;
+  }
+
+  function calibrateSpeed() {
+    const maxScroll = Math.max(scrollContent.scrollHeight - scrollArea.clientHeight, 1);
+    basePxPerSecond = maxScroll / TARGET_SECONDS;
+  }
+
+  function applyFontSize(px) {
+    scrollContent.querySelectorAll('p').forEach(p => p.style.fontSize = px + 'px');
+    fontValue.textContent = px + 'px';
+  }
+
+  function updateElapsedDisplay() {
+    const totalSeconds = elapsedMs / 1000;
+    elapsedEl.textContent = formatTime(totalSeconds);
+    elapsedEl.classList.remove('warn', 'over');
+    if (totalSeconds >= TARGET_SECONDS) {
+      elapsedEl.classList.add('over');
+    } else if (totalSeconds >= TARGET_SECONDS - 20) {
+      elapsedEl.classList.add('warn');
+    }
+  }
+
+  function startElapsedTimer() {
+    stopElapsedTimer();
+    elapsedTimerId = setInterval(() => {
+      elapsedMs += 1000;
+      updateElapsedDisplay();
+    }, 1000);
+  }
+
+  function stopElapsedTimer() {
+    if (elapsedTimerId) {
+      clearInterval(elapsedTimerId);
+      elapsedTimerId = null;
+    }
+  }
+
+  function scrollStep() {
+    if (state !== 'running') return;
+    const now = Date.now();
+    if (lastFrameTime === null) lastFrameTime = now;
+    const deltaSeconds = (now - lastFrameTime) / 1000;
+    lastFrameTime = now;
+
+    const maxScroll = Math.max(scrollContent.scrollHeight - scrollArea.clientHeight, 1);
+    scrollTop = Math.min(scrollTop + basePxPerSecond * speedFactor * deltaSeconds, maxScroll);
+    scrollArea.scrollTop = scrollTop;
+
+    if (scrollTop >= maxScroll) {
+      finish();
+    }
+  }
+
+  function startScrollTimer() {
+    stopScrollTimer();
+    lastFrameTime = null;
+    scrollTimerId = setInterval(scrollStep, 50);
+  }
+
+  function stopScrollTimer() {
+    if (scrollTimerId) {
+      clearInterval(scrollTimerId);
+      scrollTimerId = null;
+    }
+  }
+
+  function setButtonsForState() {
+    if (state === 'idle' || state === 'countdown') {
+      btnStart.disabled = state === 'countdown';
+      btnPause.disabled = true;
+      btnPause.textContent = 'Pausar';
+    } else if (state === 'running') {
+      btnStart.disabled = true;
+      btnPause.disabled = false;
+      btnPause.textContent = 'Pausar';
+    } else if (state === 'paused') {
+      btnStart.disabled = true;
+      btnPause.disabled = false;
+      btnPause.textContent = 'Reanudar';
+    } else if (state === 'finished') {
+      btnStart.disabled = true;
+      btnPause.disabled = true;
+    }
+
+    // El tamaño de texto y el guion solo se pueden cambiar en reposo:
+    // cambiarlos a mitad de lectura desincroniza la velocidad calibrada
+    // con el tiempo/posición ya recorridos.
+    const locked = state === 'countdown' || state === 'running' || state === 'paused';
+    fontSlider.disabled = locked;
+    btnLoadScript.disabled = locked;
+  }
+
+  function beginCountdown() {
+    if (state !== 'idle') return;
+    state = 'countdown';
+    setButtonsForState();
+    calibrateSpeed();
+
+    let remaining = countdownSeconds;
+    countdownNumber.textContent = remaining;
+    countdownOverlay.classList.remove('hidden');
+
+    const tick = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(tick);
+        countdownOverlay.classList.add('hidden');
+        beginRunning();
+      } else {
+        countdownNumber.textContent = remaining;
+      }
+    }, 1000);
+  }
+
+  function beginRunning() {
+    state = 'running';
+    elapsedMs = 0;
+    updateElapsedDisplay();
+    startElapsedTimer();
+    startScrollTimer();
+    setButtonsForState();
+  }
+
+  function togglePause() {
+    if (state === 'running') {
+      state = 'paused';
+      stopElapsedTimer();
+      stopScrollTimer();
+      setButtonsForState();
+    } else if (state === 'paused') {
+      state = 'running';
+      startElapsedTimer();
+      startScrollTimer();
+      setButtonsForState();
+    }
+  }
+
+  function finish() {
+    state = 'finished';
+    stopElapsedTimer();
+    stopScrollTimer();
+    setButtonsForState();
+  }
+
+  function setScriptParagraphs(text) {
+    const paragraphs = text
+      .split(/\n\s*\n/)
+      .map(p => p.replace(/\s+/g, ' ').trim())
+      .filter(p => p.length > 0);
+
+    scrollContent.innerHTML = '';
+    paragraphs.forEach(paragraphText => {
+      const p = document.createElement('p');
+      p.textContent = paragraphText;
+      p.style.fontSize = fontSlider.value + 'px';
+      scrollContent.appendChild(p);
+    });
+
+    reset();
+    calibrateSpeed();
+  }
+
+  function reset() {
+    state = 'idle';
+    stopElapsedTimer();
+    stopScrollTimer();
+    scrollTop = 0;
+    scrollArea.scrollTop = 0;
+    elapsedMs = 0;
+    updateElapsedDisplay();
+    countdownOverlay.classList.add('hidden');
+    setButtonsForState();
+  }
+
+  countdownChoice.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || state !== 'idle') return;
+    countdownChoice.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    countdownSeconds = parseInt(btn.dataset.value, 10);
+  });
+
+  speedSlider.addEventListener('input', () => {
+    speedFactor = parseFloat(speedSlider.value);
+    speedValue.textContent = speedFactor.toFixed(2) + 'x';
+  });
+
+  fontSlider.addEventListener('input', () => {
+    applyFontSize(parseInt(fontSlider.value, 10));
+    calibrateSpeed();
+  });
+
+  btnLoadScript.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setScriptParagraphs(String(reader.result));
+      scriptFileName.textContent = file.name;
+    };
+    reader.readAsText(file, 'UTF-8');
+    fileInput.value = '';
+  });
+
+  toggleControls.addEventListener('click', () => {
+    const hidden = controlsPanel.classList.toggle('hidden');
+    toggleControls.textContent = hidden ? 'Mostrar controles' : 'Ocultar controles';
+  });
+
+  btnStart.addEventListener('click', beginCountdown);
+  btnPause.addEventListener('click', togglePause);
+  btnReset.addEventListener('click', reset);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space') return;
+    e.preventDefault();
+    if (state === 'idle') beginCountdown();
+    else if (state === 'running' || state === 'paused') togglePause();
+  });
+
+  window.addEventListener('resize', () => {
+    if (state === 'idle') calibrateSpeed();
+  });
+
+  applyFontSize(46);
+  calibrateSpeed();
+  setButtonsForState();
+})();
+</script>
+</body>
+</html>
